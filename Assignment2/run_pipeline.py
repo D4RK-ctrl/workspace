@@ -1,4 +1,4 @@
-"""Command-line entry point for Phase 2 extract and validate."""
+"""Command-line entry point for Phase 3 extract, validate, and model."""
 
 import argparse
 from contextlib import contextmanager
@@ -15,7 +15,9 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 from pipeline.config import Config
+from pipeline.clean import read_raw_artifacts
 from pipeline.extract import ExtractionError, extract_csv, extract_dispatch, extract_orders
+from pipeline.transform import HANDLED_MODEL_FAIL_IDS, ModelError, build_model, unhandled_validation_failures, write_model
 from pipeline.validate import validate_run
 
 
@@ -96,7 +98,7 @@ def run(config: Config) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="FlashEats Phase 1 raw source extraction")
+    parser = argparse.ArgumentParser(description="FlashEats Phase 3 extract, validate, and model")
     parser.add_argument("--run-date", required=True, help="logical run date (YYYY-MM-DD)")
     args = parser.parse_args()
     try:
@@ -104,18 +106,34 @@ def main() -> int:
         raw_dir = run(config)
         report = validate_run(raw_dir)
         summary = report["summary"]
+        unhandled = unhandled_validation_failures(report)
+        handled = sorted(check["check_id"] for check in report["checks"]
+                         if check["status"] == "FAIL" and check["check_id"] in HANDLED_MODEL_FAIL_IDS)
         print(f"[VALIDATE] {report['overall_status']} "
               f"(pass={summary['pass']} warn={summary['warn']} "
               f"fail={summary['fail']} unknown={summary['unknown']})")
         print(f"[VALIDATE] report written: {raw_dir / 'validation_report.json'}")
-        if report["overall_status"] == "FAIL":
-            print("PHASE 2 VALIDATION FAILED")
+        if unhandled:
+            print(f"[VALIDATE] unhandled FAIL blocks modelling: {', '.join(unhandled)}")
             return 2
-        print("PHASE 2 COMPLETE")
-        return 0
+        if handled:
+            print(f"[VALIDATE] handled modelling exceptions: {', '.join(handled)}")
     except (ValueError, OSError, ExtractionError) as exc:
-        print(f"PHASE 2 PIPELINE FAILED: {exc}", file=sys.stderr)
+        print(f"PHASE 3 EXTRACTION/VALIDATION FAILED: {exc}", file=sys.stderr)
         return 1
+    try:
+        raw = read_raw_artifacts(raw_dir)
+        journey, model_manifest = build_model(raw, config.run_date.isoformat(), report)
+        output = write_model(journey, model_manifest, config.project_root / "data" / "processed")
+    except (ModelError, OSError, ValueError, TypeError, KeyError) as exc:
+        print(f"PHASE 3 MODEL FAILED: {exc}", file=sys.stderr)
+        return 3
+    print(f"[MODEL] canonical orders: {model_manifest['output_order_rows']}")
+    print(f"[MODEL] excluded conflicts: {model_manifest['conflicting_order_ids']}")
+    print(f"[MODEL] order_journey written: {output / 'order_journey.csv'}")
+    print(f"[MODEL] manifest written: {output / 'model_manifest.json'}")
+    print("PHASE 3 COMPLETE")
+    return 0
 
 
 if __name__ == "__main__":

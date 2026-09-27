@@ -173,10 +173,15 @@ class ValidationTests(unittest.TestCase):
     def test_cli_exit_codes_for_validation_result(self):
         for overall, expected in (("FAIL", 2), ("WARN", 0)):
             fake = {"overall_status": overall,
-                    "summary": {"pass": 1, "warn": 0, "fail": int(overall == "FAIL"), "unknown": 1}}
+                    "summary": {"pass": 1, "warn": 0, "fail": int(overall == "FAIL"), "unknown": 1},
+                    "checks": ([{"check_id": "dispatch_duplicate_order_id", "status": "FAIL"}]
+                               if overall == "FAIL" else [])}
             with patch("sys.argv", ["run_pipeline.py", "--run-date", "2026-08-28"]), \
                  patch("run_pipeline.run", return_value=Path("data/raw/run_date=2026-08-28")), \
-                 patch("run_pipeline.validate_run", return_value=fake):
+                 patch("run_pipeline.validate_run", return_value=fake), \
+                 patch("run_pipeline.read_raw_artifacts", return_value={}), \
+                 patch("run_pipeline.build_model", return_value=([], {"output_order_rows": 0, "conflicting_order_ids": 0})), \
+                 patch("run_pipeline.write_model", return_value=Path("data/processed/run_date=2026-08-28")):
                 self.assertEqual(main(), expected)
 
 
