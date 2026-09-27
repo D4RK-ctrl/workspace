@@ -181,8 +181,21 @@ class ValidationTests(unittest.TestCase):
                  patch("run_pipeline.validate_run", return_value=fake), \
                  patch("run_pipeline.read_raw_artifacts", return_value={}), \
                  patch("run_pipeline.build_model", return_value=([], {"output_order_rows": 0, "conflicting_order_ids": 0})), \
-                 patch("run_pipeline.write_model", return_value=Path("data/processed/run_date=2026-08-28")):
+                 patch("run_pipeline.write_model", return_value=Path("data/processed/run_date=2026-08-28")) as write_model, \
+                 patch("run_pipeline.read_model", return_value=([], {})) as read_model, \
+                 patch("run_pipeline.calculate_metrics", return_value={"metrics": [
+                     {"metric_id": name, "value": None} for name in ("late_completed_delivery_rate",
+                     "median_lateness_minutes_among_late_orders", "median_creation_to_pickup_minutes")]}), \
+                 patch("run_pipeline.write_metrics", return_value=Path("data/gold/run_date=2026-08-28")) as write_metrics:
                 self.assertEqual(main(), expected)
+                if overall == "FAIL":
+                    write_model.assert_not_called()
+                    read_model.assert_not_called()
+                    write_metrics.assert_not_called()
+                else:
+                    write_model.assert_called_once()
+                    read_model.assert_called_once()
+                    write_metrics.assert_called_once()
 
 
 if __name__ == "__main__":

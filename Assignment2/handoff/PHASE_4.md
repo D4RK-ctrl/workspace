@@ -4,7 +4,7 @@ Phase 4 metric layer complete. The requested 2026-08-28 pipeline run exited 0. F
 
 # FILES CREATED OR CHANGED
 
-Created `pipeline/metrics.py`, `tests/test_metrics.py`, `docs/metric_definitions.md`, and this handoff. Updated `run_pipeline.py`, `README.md`, and `.gitignore`. No prior phase rule, eligibility definition, instructor repository, or raw source was changed.
+Created `pipeline/metrics.py`, `tests/test_metrics.py`, `docs/metric_definitions.md`, and this handoff. Updated `run_pipeline.py`, `README.md`, and `.gitignore`. A follow-up regression repair updated only the Phase 2/3 CLI mocks in `tests/test_validate.py` and `tests/test_transform.py`. No prior phase rule, eligibility definition, instructor repository, or raw source was changed.
 
 # COMMANDS RUN
 
@@ -12,7 +12,7 @@ Ran focused `python -B -m unittest discover -s tests -p test_metrics.py -q`, ful
 
 # TEST RESULTS
 
-Five focused Phase 4 tests passed. The full 48-test suite had 46 passes and two failures in pre-existing CLI mock tests: `test_cli_approved_fails_can_build_model` and `test_cli_exit_codes_for_validation_result`. Those mocks stop at a fake Phase 3 output path, so the real Phase 4 model-artifact read returns exit 4. The allowed Phase 4 file list does not include those earlier test modules; their fixtures need a separate orchestrator-approved update. The real full pipeline and generated-artifact checks passed.
+Five focused Phase 4 tests passed. After updating the two prior-phase CLI mocks for the metrics boundary, the complete suite passed: 48 tests, 0 failures, 0 skips. The successful real pipeline run again exited 0, produced all five requested artifacts, and preserved the observed metric values. A non-failing socket ResourceWarning from the existing local HTTP test appeared during the suite.
 
 # METRIC DEFINITIONS
 
@@ -48,19 +48,19 @@ Phase 3 eligibility flags are authoritative. A false pre-delivery intervention f
 
 # LIMITATIONS
 
-The comparison is descriptive and cannot establish intervention effectiveness. `driver_arrived_at_restaurant` is absent, so creation-to-pickup combines multiple stages. The gold files are direct writes, not an atomic multi-file publication transaction; that is outside Phase 4. The two earlier CLI mock tests need fixture updates to represent the new stage.
+The comparison is descriptive and cannot establish intervention effectiveness. `driver_arrived_at_restaurant` is absent, so creation-to-pickup combines multiple stages. The gold files are direct writes, not an atomic multi-file publication transaction; that is outside Phase 4.
 
 # MANUAL ACTION REQUIRED
 
-None for the real pipeline. Orchestrator approval is needed before changing prior-phase test files excluded from the Phase 4 allowed-file list.
+None.
 
 # BLOCKERS
 
-No blocker to the requested run or metric outputs. Full regression-suite green status is blocked by two outdated prior-phase CLI mocks as described above.
+No blocker to the requested run, metric outputs, or full regression suite.
 
 # QUESTIONS FOR ORCHESTRATOR
 
-May the two prior-phase CLI mocks be updated in a separate authorized change to provide persisted Phase 3 artifacts or mock Phase 4 metric calls?
+None for this regression repair.
 
 # PROPOSED PHASE 5
 

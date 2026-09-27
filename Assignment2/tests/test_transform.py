@@ -129,9 +129,11 @@ class TransformTests(unittest.TestCase):
         with patch("sys.argv", ["run_pipeline.py", "--run-date", "2026-08-28"]), \
              patch("run_pipeline.run", return_value=Path("data/raw/run_date=2026-08-28")), \
              patch("run_pipeline.validate_run", return_value=report), \
-             patch("run_pipeline.read_raw_artifacts") as read_raw:
+             patch("run_pipeline.read_raw_artifacts") as read_raw, \
+             patch("run_pipeline.read_model") as read_model:
             self.assertEqual(main(), 2)
             read_raw.assert_not_called()
+            read_model.assert_not_called()
 
     def test_cli_approved_fails_can_build_model(self):
         approved = ("orders_conflicting_duplicate_ids", "orders_parent_grain",
@@ -140,8 +142,15 @@ class TransformTests(unittest.TestCase):
              patch("run_pipeline.run", return_value=Path("data/raw/run_date=2026-08-28")), \
              patch("run_pipeline.validate_run", return_value=validation(*approved)), \
              patch("run_pipeline.read_raw_artifacts", return_value=input_sources()), \
-             patch("run_pipeline.write_model", return_value=Path("data/processed/run_date=2026-08-28")):
+             patch("run_pipeline.write_model", return_value=Path("data/processed/run_date=2026-08-28")), \
+             patch("run_pipeline.read_model", return_value=([], {})) as read_model, \
+             patch("run_pipeline.calculate_metrics", return_value={"metrics": [
+                 {"metric_id": name, "value": None} for name in ("late_completed_delivery_rate",
+                 "median_lateness_minutes_among_late_orders", "median_creation_to_pickup_minutes")]}), \
+             patch("run_pipeline.write_metrics", return_value=Path("data/gold/run_date=2026-08-28")) as write_metrics:
             self.assertEqual(main(), 0)
+            read_model.assert_called_once()
+            write_metrics.assert_called_once()
 
     def test_written_model_has_unique_ids_and_strict_json_manifest(self):
         journey, manifest = self.model()
