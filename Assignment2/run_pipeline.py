@@ -1,4 +1,4 @@
-"""Command-line entry point for Phase 3 extract, validate, and model."""
+"""Command-line entry point for Phase 4 extract, validate, model, and metrics."""
 
 import argparse
 from contextlib import contextmanager
@@ -17,6 +17,7 @@ from urllib.request import urlopen
 from pipeline.config import Config
 from pipeline.clean import read_raw_artifacts
 from pipeline.extract import ExtractionError, extract_csv, extract_dispatch, extract_orders
+from pipeline.metrics import MetricError, calculate_metrics, read_model, write_metrics
 from pipeline.transform import HANDLED_MODEL_FAIL_IDS, ModelError, build_model, unhandled_validation_failures, write_model
 from pipeline.validate import validate_run
 
@@ -98,7 +99,7 @@ def run(config: Config) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="FlashEats Phase 3 extract, validate, and model")
+    parser = argparse.ArgumentParser(description="FlashEats Phase 4 extract, validate, model, and metrics")
     parser.add_argument("--run-date", required=True, help="logical run date (YYYY-MM-DD)")
     args = parser.parse_args()
     try:
@@ -119,20 +120,31 @@ def main() -> int:
         if handled:
             print(f"[VALIDATE] handled modelling exceptions: {', '.join(handled)}")
     except (ValueError, OSError, ExtractionError) as exc:
-        print(f"PHASE 3 EXTRACTION/VALIDATION FAILED: {exc}", file=sys.stderr)
+        print(f"PHASE 4 EXTRACTION/VALIDATION FAILED: {exc}", file=sys.stderr)
         return 1
     try:
         raw = read_raw_artifacts(raw_dir)
         journey, model_manifest = build_model(raw, config.run_date.isoformat(), report)
         output = write_model(journey, model_manifest, config.project_root / "data" / "processed")
     except (ModelError, OSError, ValueError, TypeError, KeyError) as exc:
-        print(f"PHASE 3 MODEL FAILED: {exc}", file=sys.stderr)
+        print(f"PHASE 4 MODEL FAILED: {exc}", file=sys.stderr)
         return 3
     print(f"[MODEL] canonical orders: {model_manifest['output_order_rows']}")
     print(f"[MODEL] excluded conflicts: {model_manifest['conflicting_order_ids']}")
     print(f"[MODEL] order_journey written: {output / 'order_journey.csv'}")
     print(f"[MODEL] manifest written: {output / 'model_manifest.json'}")
-    print("PHASE 3 COMPLETE")
+    try:
+        model_rows, persisted_manifest = read_model(output)
+        metric_result = calculate_metrics(model_rows, persisted_manifest)
+        gold_dir = write_metrics(metric_result, config.project_root / "data" / "gold")
+    except (MetricError, OSError, ValueError, TypeError, KeyError, OverflowError) as exc:
+        print(f"PHASE 4 METRICS FAILED: {exc}", file=sys.stderr)
+        return 4
+    for item in metric_result["metrics"][:3]:
+        print(f"[METRICS] {item['metric_id']}: {item['value']}")
+    print("[METRICS] intervention cohorts written")
+    print(f"[METRICS] metrics.json written: {gold_dir / 'metrics.json'}")
+    print("PHASE 4 COMPLETE")
     return 0
 
 

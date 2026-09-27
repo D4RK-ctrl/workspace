@@ -4,3 +4,4 @@ __pycache__/
 *.log
 data/raw/
 data/processed/
+data/gold/
