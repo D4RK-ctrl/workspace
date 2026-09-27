@@ -1,9 +1,10 @@
-"""Command-line entry point for Phase 4 extract, validate, model, and metrics."""
+"""Attempt-scoped FlashEats pipeline with checked local publication."""
 
 import argparse
 from contextlib import contextmanager
 from datetime import date
 import json
+import logging
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,6 +19,9 @@ from pipeline.config import Config
 from pipeline.clean import read_raw_artifacts
 from pipeline.extract import ExtractionError, extract_csv, extract_dispatch, extract_orders
 from pipeline.metrics import MetricError, calculate_metrics, read_model, write_metrics
+from pipeline.logging_config import configure_logging
+from pipeline.publish import (PublicationError, new_run_id, publish_attempt, timestamp,
+                              verify_artifacts, write_json)
 from pipeline.transform import HANDLED_MODEL_FAIL_IDS, ModelError, build_model, unhandled_validation_failures, write_model
 from pipeline.validate import validate_run
 
@@ -68,9 +72,9 @@ def available_api(config: Config):
                 process.wait(timeout=3)
 
 
-def run(config: Config) -> Path:
+def run(config: Config, raw_root: Path | None = None) -> Path:
     source = config.source_root
-    raw_root = config.raw_root
+    raw_root = raw_root or config.raw_root
     raw_root.mkdir(parents=True, exist_ok=True)
     final = raw_root / f"run_date={config.run_date.isoformat()}"
     with tempfile.TemporaryDirectory(prefix=".phase1-", dir=raw_root) as temporary:
@@ -94,17 +98,76 @@ def run(config: Config) -> Path:
     for result in results:
         pages = f", {result['pages_retrieved']} pages" if "pages_retrieved" in result else ""
         print(f"[EXTRACT] {result['source_name']}: OK ({result['retrieved_record_count']} records{pages})")
+        logging.getLogger("flasheats").info("extract source=%s rows=%s pages=%s",
+                                             result["source_name"], result["retrieved_record_count"],
+                                             result.get("pages_retrieved"))
     print(f"[RAW] manifest written: {final / 'manifest.json'}")
     return final
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="FlashEats Phase 4 extract, validate, model, and metrics")
+    parser = argparse.ArgumentParser(description="FlashEats staged extract, validate, model, metrics, and publish")
     parser.add_argument("--run-date", required=True, help="logical run date (YYYY-MM-DD)")
     args = parser.parse_args()
     try:
         config = Config.from_environment(Path(__file__).resolve().parent, date.fromisoformat(args.run_date))
-        raw_dir = run(config)
+    except (ValueError, OSError) as exc:
+        print(f"PIPELINE CONFIGURATION FAILED: {exc}", file=sys.stderr)
+        return 1
+
+    run_id = new_run_id()
+    attempt = config.project_root / "data" / ".runs" / run_id
+    try:
+        attempt.mkdir(parents=True, exist_ok=False)
+        logger = configure_logging(attempt, run_id, config.run_date.isoformat())
+    except OSError as exc:
+        print(f"PIPELINE RUNTIME FAILED: {exc}", file=sys.stderr)
+        return 1
+    manifest_path = attempt / "run_manifest.json"
+    stages = {name: {"status": "PENDING", "started_at": None, "completed_at": None, "message": ""}
+              for name in ("extract", "validate", "model", "metrics", "publish")}
+    manifest = {"run_id": run_id, "run_date": config.run_date.isoformat(),
+                "started_at": timestamp(), "completed_at": None, "overall_status": "RUNNING",
+                "exit_code": None, "stages": stages, "artifact_locations": {},
+                "validation_summary": None, "model_summary": None, "metric_ids": [],
+                "handled_validation_fail_ids": [], "warnings_count": None,
+                "unknown_count": None, "software": {"python_version": sys.version.split()[0]}}
+    write_json(manifest_path, manifest)
+    logger.info("pipeline start")
+    print(f"[RUN] run_id={run_id} run_date={config.run_date.isoformat()}")
+
+    def start(name):
+        stages[name].update(status="RUNNING", started_at=timestamp(), message="Started")
+        write_json(manifest_path, manifest)
+        logger.info("stage=%s start", name)
+
+    def done(name, message):
+        stages[name].update(status="SUCCESS", completed_at=timestamp(), message=message)
+        write_json(manifest_path, manifest)
+        logger.info("stage=%s success %s", name, message)
+
+    def fail(name, code, exc, blocked=False):
+        stages[name].update(status="BLOCKED" if blocked else "FAILED",
+                            completed_at=timestamp(), message=str(exc))
+        for stage in stages.values():
+            if stage["status"] == "PENDING":
+                stage["status"] = "BLOCKED"
+                stage["message"] = f"Earlier stage {name} did not complete"
+        manifest.update(overall_status="FAILED", exit_code=code, completed_at=timestamp())
+        write_json(manifest_path, manifest)
+        logger.error("stage=%s failed exit_code=%s error=%s", name, code, exc)
+        print(f"PIPELINE {name.upper()} FAILED: {exc}", file=sys.stderr)
+        return code
+
+    start("extract")
+    try:
+        raw_dir = run(config, attempt / "raw")
+        done("extract", "Four sources retrieved into attempt workspace")
+    except (ValueError, OSError, ExtractionError) as exc:
+        return fail("extract", 1, exc)
+
+    start("validate")
+    try:
         report = validate_run(raw_dir)
         summary = report["summary"]
         unhandled = unhandled_validation_failures(report)
@@ -114,37 +177,67 @@ def main() -> int:
               f"(pass={summary['pass']} warn={summary['warn']} "
               f"fail={summary['fail']} unknown={summary['unknown']})")
         print(f"[VALIDATE] report written: {raw_dir / 'validation_report.json'}")
+        manifest["validation_summary"] = summary
+        manifest["warnings_count"] = summary["warn"]
+        manifest["unknown_count"] = summary["unknown"]
+        manifest["handled_validation_fail_ids"] = handled
+        logger.info("validation status=%s summary=%s handled=%s unhandled=%s",
+                    report["overall_status"], summary, handled, unhandled)
         if unhandled:
             print(f"[VALIDATE] unhandled FAIL blocks modelling: {', '.join(unhandled)}")
-            return 2
+            return fail("validate", 2, f"Unhandled validation FAIL: {', '.join(unhandled)}", blocked=True)
         if handled:
             print(f"[VALIDATE] handled modelling exceptions: {', '.join(handled)}")
+        done("validate", "Validation report saved; no unhandled FAIL")
     except (ValueError, OSError, ExtractionError) as exc:
-        print(f"PHASE 4 EXTRACTION/VALIDATION FAILED: {exc}", file=sys.stderr)
-        return 1
+        return fail("validate", 1, exc)
+
+    start("model")
     try:
         raw = read_raw_artifacts(raw_dir)
         journey, model_manifest = build_model(raw, config.run_date.isoformat(), report)
-        output = write_model(journey, model_manifest, config.project_root / "data" / "processed")
+        output = write_model(journey, model_manifest, attempt / "processed")
+        manifest["model_summary"] = {"output_order_rows": model_manifest["output_order_rows"],
+                                     "excluded_conflicting_orders": model_manifest["conflicting_order_ids"],
+                                     "delay_metric_eligible_orders": model_manifest["delay_metric_eligible_orders"],
+                                     "duration_metric_eligible_orders": model_manifest["duration_metric_eligible_orders"]}
+        logger.info("model rows=%s excluded_conflicts=%s",
+                    model_manifest["output_order_rows"], model_manifest["conflicting_order_ids"])
+        done("model", f"{model_manifest['output_order_rows']} unique canonical orders")
     except (ModelError, OSError, ValueError, TypeError, KeyError) as exc:
-        print(f"PHASE 4 MODEL FAILED: {exc}", file=sys.stderr)
-        return 3
+        return fail("model", 3, exc)
     print(f"[MODEL] canonical orders: {model_manifest['output_order_rows']}")
     print(f"[MODEL] excluded conflicts: {model_manifest['conflicting_order_ids']}")
     print(f"[MODEL] order_journey written: {output / 'order_journey.csv'}")
     print(f"[MODEL] manifest written: {output / 'model_manifest.json'}")
+    start("metrics")
     try:
         model_rows, persisted_manifest = read_model(output)
         metric_result = calculate_metrics(model_rows, persisted_manifest)
-        gold_dir = write_metrics(metric_result, config.project_root / "data" / "gold")
+        gold_dir = write_metrics(metric_result, attempt / "gold")
+        manifest["metric_ids"] = [item["metric_id"] for item in metric_result["metrics"]]
+        logger.info("metrics completed ids=%s", manifest["metric_ids"])
+        done("metrics", "Four primary metrics and five evidence rows written")
     except (MetricError, OSError, ValueError, TypeError, KeyError, OverflowError) as exc:
-        print(f"PHASE 4 METRICS FAILED: {exc}", file=sys.stderr)
-        return 4
+        return fail("metrics", 4, exc)
     for item in metric_result["metrics"][:3]:
         print(f"[METRICS] {item['metric_id']}: {item['value']}")
     print("[METRICS] intervention cohorts written")
     print(f"[METRICS] metrics.json written: {gold_dir / 'metrics.json'}")
-    print("PHASE 4 COMPLETE")
+
+    start("publish")
+    staged = {"raw": raw_dir, "processed": output, "gold": gold_dir}
+    finals = {name: config.project_root / "data" / name / f"run_date={config.run_date.isoformat()}"
+              for name in staged}
+    try:
+        verify_artifacts(staged, config.run_date.isoformat())
+        latest = config.project_root / "data" / "run_manifest.json"
+        publish_attempt(staged, finals, latest, manifest_path, manifest, logger)
+    except (PublicationError, OSError, ValueError, TypeError, KeyError) as exc:
+        return fail("publish", 5, exc)
+    logger.info("stage=publish success latest_manifest=%s", latest)
+    print(f"[PUBLISH] latest successful manifest: {latest}")
+    print("PHASE 5 COMPLETE")
     return 0
 
 

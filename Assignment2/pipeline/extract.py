@@ -4,6 +4,7 @@ import csv
 from contextlib import closing
 import hashlib
 import json
+import logging
 import math
 from pathlib import Path
 import shutil
@@ -123,7 +124,9 @@ def _fetch_page(url: str, timeout: float, max_retries: int, page: int) -> bytes:
         if attempt == max_retries:
             raise ExtractionError(f"Dispatch page {page}: {reason}; exhausted {max_retries} attempts")
         wait = _bounded_wait(attempt, retry_after)
-        print(f"[API] retry page={page} attempt={attempt}/{max_retries} reason={reason} wait={wait:g}s")
+        message = f"retry page={page} attempt={attempt}/{max_retries} reason={reason} wait={wait:g}s"
+        logging.getLogger("flasheats").warning("api %s", message)
+        print(f"[API] {message}")
         time.sleep(wait)
     raise AssertionError("unreachable retry loop")
 
