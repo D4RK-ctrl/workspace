@@ -36,7 +36,7 @@ The two real same-date runs produced identical SHA-256 hashes for all six busine
 
 # FINAL RUN MANIFEST
 
-Each attempt has strict `run_manifest.json` recording run ID/date, start/end, status, exit code, five stage statuses/times/messages, artifact paths, validation/model summaries, handled FAIL IDs, warning/unknown counts, metric IDs and Python version. `data/run_manifest.json` reflects only the latest fully successful run.
+Each attempt has strict `run_manifest.json` recording run ID/date, start/end, status, exit code, five stage statuses/times/messages, project-relative artifact paths, validation/model summaries, handled FAIL IDs, warning/unknown counts, metric IDs and Python version. `data/run_manifest.json` reflects only the latest fully successful run.
 
 # ARTIFACT HASHES
 

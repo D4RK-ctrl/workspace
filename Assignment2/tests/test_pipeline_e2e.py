@@ -100,8 +100,11 @@ class PipelineAttemptTests(unittest.TestCase):
             body = log.read_text(encoding="utf-8")
             self.assertIn(run_id, body)
             self.assertIn("stage=publish", body)
-        for key, path in second["artifact_locations"].items():
-            self.assertEqual(second["artifact_sha256"][key], sha256(Path(path)))
+        for key, location in second["artifact_locations"].items():
+            self.assertFalse(Path(location).is_absolute())
+            published = self.root / location
+            self.assertTrue(published.is_file())
+            self.assertEqual(second["artifact_sha256"][key], sha256(published))
         metric = json.loads(artifact_paths[4].read_text(encoding="utf-8"))
         self.assertEqual(metric["metrics"][0]["value"], 100)
         self.assertEqual(metric["metrics"][1]["value"], 10)

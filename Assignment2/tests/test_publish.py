@@ -47,10 +47,11 @@ class PublicationTests(unittest.TestCase):
     def test_replacement_hashes_strict_manifest_and_no_appended_pages(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)
-            old = artifact_dirs(base / "public", "old")
+            project_root = base / "project"
+            old = artifact_dirs(project_root / "data", "old")
             staged = artifact_dirs(base / "attempt", "new")
             old["raw"].joinpath("page_0002.json").write_text("stale", encoding="utf-8")
-            latest = base / "public" / "run_manifest.json"
+            latest = project_root / "data" / "run_manifest.json"
             write_json(latest, {"run_id": "old"})
             attempt_file = base / "attempt" / "run_manifest.json"
             result = publish_attempt(staged, old, latest, attempt_file,
@@ -65,15 +66,21 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(len(checked["metrics"]["metrics"]), 4)
             for key, path in checked["paths"].items():
                 self.assertEqual(result["artifact_sha256"][key], sha256(path))
+                location = result["artifact_locations"][key]
+                self.assertFalse(Path(location).is_absolute())
+                self.assertEqual(location, path.relative_to(project_root).as_posix())
+                self.assertEqual((project_root / location).resolve(), path.resolve())
+            self.assertEqual(result["artifact_locations"],
+                             json.loads(latest.read_text())["artifact_locations"])
             self.assertEqual(json.loads(attempt_file.read_text(),
                                         parse_constant=lambda value: self.fail(value))["run_id"], "new")
 
     def test_publication_failure_restores_old_directories_and_latest_manifest(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)
-            old = artifact_dirs(base / "public", "old")
+            old = artifact_dirs(base / "project" / "data", "old")
             staged = artifact_dirs(base / "attempt", "new")
-            latest = base / "public" / "run_manifest.json"
+            latest = base / "project" / "data" / "run_manifest.json"
             write_json(latest, {"run_id": "old"})
             real_replace = os.replace
 

@@ -117,9 +117,14 @@ def publish_attempt(staged: dict[str, Path], finals: dict[str, Path], latest: Pa
 
         checked = verify_artifacts(finals, manifest["run_date"])
         hashes = {key: sha256(path) for key, path in checked["paths"].items()}
+        project_root = latest.parent.parent.resolve()
+        portable_locations = {
+            key: path.resolve().relative_to(project_root).as_posix()
+            for key, path in checked["paths"].items()
+        }
         successful = {**manifest,
                       "completed_at": timestamp(), "overall_status": "SUCCESS", "exit_code": 0,
-                      "artifact_locations": {key: str(path) for key, path in checked["paths"].items()},
+                      "artifact_locations": portable_locations,
                       "artifact_sha256": hashes}
         successful["stages"] = {**manifest["stages"], "publish": {
             "status": "SUCCESS", "started_at": manifest["stages"]["publish"]["started_at"],
