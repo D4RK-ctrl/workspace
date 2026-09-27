@@ -1,6 +1,6 @@
 # Phase 0 source audit
 
-Inspected local inputs on 2026-09-27. Paths below are relative to `refrence/flasheats-classroom-pack/` unless stated otherwise. Database access was read-only; profiling ran in memory and created no data outputs. Counts describe this snapshot, not future validation constants. Ownership below is a **proposed source-of-record interpretation**, not verified organizational ownership.
+Inspected local inputs on 2026-09-27. Paths below are relative to `reference/flasheats-classroom-pack/` unless stated otherwise. Database access was read-only; profiling ran in memory and created no data outputs. Counts describe this snapshot, not future validation constants. Ownership below is a **proposed source-of-record interpretation**, not verified organizational ownership.
 
 | Source | Location | Retrieval | Business object | Grain | Key | Important fields | Authority | Known issues | Missing information | Completeness check |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -55,7 +55,7 @@ Outcome buckets are 843 late, 652 on-time, 68 cancelled, 37 unknown. Available o
 
 ## What Classes 4-7 actually provide
 
-Class 4 principles come from `../LECTURE_CONTEXT.md`: decision-to-field mapping, fact-specific authority, freshness versus ownership, and missing milestones. No separate Class 4 notebook was present in the inspected pack.
+Class 4 principles come from `../../reference/LECTURE_CONTEXT.md`: decision-to-field mapping, fact-specific authority, freshness versus ownership, and missing milestones. No separate Class 4 notebook was present in the inspected pack.
 
 Class 5 Starter and Student notebooks provide source loading, SQL/CSV/JSON exploration and assignment prompts. They ask students to define eligibility, assess duplicates/cancellations/timestamps, group by traffic/weather/distance, compare support evidence, retrieve API pages with retries and raw preservation, and distinguish observed from inferred events. Pagination and much analysis remain TODOs; these are not complete executed solutions.
 

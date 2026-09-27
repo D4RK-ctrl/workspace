@@ -1,6 +1,6 @@
 # Proposed minimum architecture
 
-Documentation only. Nothing below has been implemented. The assignment PDF requires two or more retrieval modes, workflow modelling, 3-5 metrics, validation and a dependable entry point. It accepts a final evidence table; a dashboard is unnecessary. The eventual repository should be separate from instructor repositories and avoid personal absolute paths.
+Historical Phase 0 proposal. Nothing below had been implemented at that phase; the final implementation is documented in the [README](../README.md). The assignment PDF requires two or more retrieval modes, workflow modelling, 3-5 metrics, validation and a dependable entry point. It accepts a final evidence table; a dashboard is unnecessary. The eventual repository should be separate from instructor repositories and avoid personal absolute paths.
 
 ## Proposed repository layout
 
@@ -30,7 +30,7 @@ Use ordinary Python, pandas, requests and standard-library sqlite3/json/logging/
 
 Proposed eventual command: `python run_pipeline.py --run-date YYYY-MM-DD --source-root data/source`. Resolve relative paths against the student repository, validate arguments/configuration up front, and avoid recursive discovery of arbitrary parent directories. README must document environment setup and one-command pipeline execution. Use process environment variables with `.env.example` as documentation unless an explicit loader is added; do not imply that an example file is automatically loaded. Ignore real `.env`, secrets, runtime logs and generated outputs.
 
-Clean-clone execution requires an approved source-distribution decision: include permitted small source snapshots and a minimal local API fixture, or provide a deterministic documented retrieval step that preserves exact source identity. The current machine's `refrence/` paths cannot be an undocumented evaluator dependency. No instructor repository is copied or altered in this phase.
+At Phase 0, clean-clone execution required a source-distribution decision. The final project includes tracked small source snapshots and a minimal local API fixture under `data/source/`; ignored `reference/` repositories are not runtime dependencies. No instructor repository was copied or altered in Phase 0.
 
 ## Proposed flow and model
 
@@ -58,7 +58,7 @@ Keep entity, event, state, interaction, intervention and outcome concepts explic
 
 ## Class 8 implementation audit and reuse classification
 
-All references in this section are under `refrence/flasheats-data-pipeline/Class8_Project/`. Static inspection only; the instructor pipeline was not run because it writes into that repository. A = concept to reuse; B = implementation pattern to adapt; C = classroom-specific behavior not to copy blindly.
+All references in this section are under `reference/flasheats-data-pipeline/Class8_Project/`. Static inspection only; the instructor pipeline was not run because it writes into that repository. A = concept to reuse; B = implementation pattern to adapt; C = classroom-specific behavior not to copy blindly.
 
 | Technique | Inspected implementation | Classification and proposed treatment |
 |---|---|---|
