@@ -1,4 +1,4 @@
-"""Command-line entry point for Phase 1 extraction and raw preservation."""
+"""Command-line entry point for Phase 2 extract and validate."""
 
 import argparse
 from contextlib import contextmanager
@@ -16,6 +16,7 @@ from urllib.request import urlopen
 
 from pipeline.config import Config
 from pipeline.extract import ExtractionError, extract_csv, extract_dispatch, extract_orders
+from pipeline.validate import validate_run
 
 
 def _api_ready(api_url: str) -> bool:
@@ -91,7 +92,6 @@ def run(config: Config) -> Path:
         pages = f", {result['pages_retrieved']} pages" if "pages_retrieved" in result else ""
         print(f"[EXTRACT] {result['source_name']}: OK ({result['retrieved_record_count']} records{pages})")
     print(f"[RAW] manifest written: {final / 'manifest.json'}")
-    print("PHASE 1 EXTRACTION COMPLETE")
     return final
 
 
@@ -101,10 +101,20 @@ def main() -> int:
     args = parser.parse_args()
     try:
         config = Config.from_environment(Path(__file__).resolve().parent, date.fromisoformat(args.run_date))
-        run(config)
+        raw_dir = run(config)
+        report = validate_run(raw_dir)
+        summary = report["summary"]
+        print(f"[VALIDATE] {report['overall_status']} "
+              f"(pass={summary['pass']} warn={summary['warn']} "
+              f"fail={summary['fail']} unknown={summary['unknown']})")
+        print(f"[VALIDATE] report written: {raw_dir / 'validation_report.json'}")
+        if report["overall_status"] == "FAIL":
+            print("PHASE 2 VALIDATION FAILED")
+            return 2
+        print("PHASE 2 COMPLETE")
         return 0
     except (ValueError, OSError, ExtractionError) as exc:
-        print(f"PHASE 1 EXTRACTION FAILED: {exc}", file=sys.stderr)
+        print(f"PHASE 2 PIPELINE FAILED: {exc}", file=sys.stderr)
         return 1
 
 

@@ -163,12 +163,11 @@ def extract_dispatch(api_url: str, timeout: float, max_retries: int, page_size: 
         if len(rows) > page_size or (has_more and not rows):
             raise ExtractionError(f"Dispatch page {page}: no progress or oversized page")
         for row in rows:
-            if not isinstance(row, dict) or not isinstance(row.get("order_id"), str) or not row["order_id"]:
-                raise ExtractionError(f"Dispatch page {page}: invalid order_id record")
-            order_id = row["order_id"]
-            if order_id in seen_ids:
-                raise ExtractionError(f"Dispatch page {page}: duplicate order_id {order_id}")
-            seen_ids.add(order_id)
+            if not isinstance(row, dict):
+                raise ExtractionError(f"Dispatch page {page}: record is not a JSON object")
+            order_id = row.get("order_id")
+            if isinstance(order_id, str) and order_id.strip():
+                seen_ids.add(order_id)
         received += len(rows)
         if received > total:
             raise ExtractionError(f"Dispatch page {page}: received {received} exceeds reported total {total}")
